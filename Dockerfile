@@ -1,27 +1,33 @@
-# Build with Elixir 1.11.3/OTP 23
-FROM elixir:1.11.4 as builder
+# Build with Elixir 1.17.3/OTP 26
+FROM hexpm/elixir:1.17.3-erlang-26.1.2-debian-bookworm-20241111-slim as base
 
 WORKDIR /build
 
-# Needed for VerneMQ 1.11.0
-RUN apt-get -qq update && apt-get -qq install libsnappy-dev
+# install build dependencies
+RUN apt update --allow-releaseinfo-change -y && \
+  apt install -y \
+  libsnappy-dev \
+  libssl-dev \
+  git \
+  build-essential && \
+  apt clean && \
+  rm -f /var/lib/apt/lists/*_*
 
 # Let's start by building VerneMQ
-RUN git clone https://github.com/vernemq/vernemq.git -b 1.11.0 && \
-		cd vernemq && \
-		make rel && \
-		cd ..
+RUN git clone https://github.com/vernemq/vernemq.git -b 2.0.1 && \
+  cd vernemq && \
+  make rel && \
+  cd ..
 
 RUN mix local.hex --force && \
   mix local.rebar --force && \
   mix hex.info
 
-ENV MIX_ENV prod
-
+FROM base as builder
 # Pass --build-arg BUILD_ENV=dev to build a dev image
 ARG BUILD_ENV=prod
 
-ENV MIX_ENV=$BUILD_ENV
+ENV MIX_ENV $BUILD_ENV
 
 # Cache elixir deps
 ADD mix.exs mix.lock astarte_vmq_plugin/
