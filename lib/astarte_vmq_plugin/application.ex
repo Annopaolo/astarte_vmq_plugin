@@ -36,6 +36,12 @@ defmodule Astarte.VMQ.Plugin.Application do
 
     Config.init()
 
+    LoggerBackends.remove(:default)
+    LoggerBackends.remove(:logger)
+    LoggerBackends.remove(Astarte.VMQ.Plugin.LoggerBackend)
+
+    Logger.info("I'm now here", tag: "vmq_plugin_app_start")
+
     # List all child processes to be supervised
     children = [
       {Mississippi.Producer, Config.mississippi_opts!()},
@@ -46,9 +52,16 @@ defmodule Astarte.VMQ.Plugin.Application do
       {Xandra.Cluster, Config.xandra_options!()}
     ]
 
+    Logger.info("And now here", tag: "vmq_plugin_app_start")
+
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Astarte.VMQ.Plugin.Supervisor]
-    Supervisor.start_link(children, opts)
+    Logger.info("Here too", tag: "vmq_plugin_app_start")
+
+    res = Supervisor.start_link(children, opts)
+
+    Logger.info("Finally here", tag: "vmq_plugin_app_start")
+    res
   end
 end

@@ -27,6 +27,8 @@ defmodule Astarte.VMQ.Plugin do
   alias Astarte.VMQ.Plugin.Queries
   alias Astarte.Core.Device
 
+  require Logger
+
   @max_rand trunc(:math.pow(2, 32) - 1)
 
   def auth_on_register(_peer, _subscriber_id, :undefined, _password, _cleansession) do
@@ -257,6 +259,9 @@ defmodule Astarte.VMQ.Plugin do
       timestamp: timestamp,
       sharding_key: sharding_key
     ]
+
+    Logger.info("Publishing #{realm}/#{device_id}, payload #{inspect(payload)} from Logger")
+    :logger.info("Publishing #{realm}/#{device_id}, payload #{inspect(payload)} from :logger")
 
     :ok = Mississippi.Producer.EventsProducer.publish(payload, publish_opts)
   end
