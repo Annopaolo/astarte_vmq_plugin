@@ -38,7 +38,7 @@ defmodule AstarteVernemq.MixProject do
       {:astarte_core, github: "astarte-platform/astarte_core"},
       {:vernemq_dev, github: "vernemq/vernemq_dev"},
       {:excoveralls, "~> 0.15", only: :test},
-      # {:mississippi, github: "secomind/mississippi"},
+      {:mississippi, github: "secomind/mississippi"},
       {:dialyxir, "~> 1.4", only: [:dev, :ci], runtime: false},
       # {:pretty_log, github: "annopaolo/pretty_log", ref: "add-date", override: true},
       {:xandra, "~> 0.14"}

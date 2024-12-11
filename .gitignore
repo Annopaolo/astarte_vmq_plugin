@@ -24,3 +24,6 @@ astarte_vmq_plugin-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+# MacOS specific
+.DS_Store
