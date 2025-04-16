@@ -1,7 +1,7 @@
 #
 # This file is part of Astarte.
 #
-# Copyright 2017 - 2025 SECO Mind Srl
+# Copyright 2025 SECO Mind Srl
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,6 +16,15 @@
 # limitations under the License.
 #
 
-Mimic.copy(Astarte.VMQ.Plugin.Config)
+defmodule Astarte.VMQ.Plugin.Test.Cases.AMQP do
+  use ExUnit.CaseTemplate
 
-ExUnit.start()
+  alias Astarte.VMQ.Plugin.Test.Helpers.AMQP
+
+  using(opts, do: opts)
+
+  setup_all do
+    channel = AMQP.setup_channel!()
+    {:ok, chan: channel}
+  end
+end
