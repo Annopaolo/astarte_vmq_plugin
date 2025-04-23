@@ -1,7 +1,7 @@
 #
 # This file is part of Astarte.
 #
-# Copyright 2017 - 2025 SECO Mind Srl
+# Copyright 2025 SECO Mind Srl
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,6 +16,10 @@
 # limitations under the License.
 #
 
-Mimic.copy(Astarte.VMQ.Plugin.Config)
+defmodule Astarte.VMQ.Plugin.Test.Helpers.Device do
+  alias Astarte.Core.Device, as: CoreDevice
 
-ExUnit.start(capture_log: true)
+  def random_device() do
+    CoreDevice.random_device_id() |> CoreDevice.encode_device_id()
+  end
+end
