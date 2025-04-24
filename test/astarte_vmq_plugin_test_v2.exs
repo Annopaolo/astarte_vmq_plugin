@@ -63,7 +63,7 @@ defmodule Astarte.VMQ.Plugin.Test2 do
 
     @tag :integration
     @tag :database
-    property "fails for existing devices that are being deleted", %{realm_name: realm_name} do
+    test "fails for existing devices that are being deleted", %{realm_name: realm_name} do
       device_under_deletion = DeviceHelper.random_device()
       Database.insert_device_into_devices!(realm_name, device_under_deletion)
       Database.insert_device_into_deletion_in_progress!(realm_name, device_under_deletion)
@@ -116,9 +116,7 @@ defmodule Astarte.VMQ.Plugin.Test2 do
       device_base_path = "#{realm}/#{device_id}"
 
       check all(
-              topics <-
-                list_of(TopicGenerator.mqtt_topic(prefix: "#{device_base_path}/"), min_length: 1),
-              topic_tokens = Enum.map(topics, &String.split(&1, "/", trim: true)),
+              topic_tokens <- topic_tokens(prefix: "#{device_base_path}/"),
               qos <- list_of(integer(0..2), min_length: 1)
             ) do
         topic_tokens_with_qos = Enum.zip(topic_tokens, qos)
@@ -137,8 +135,7 @@ defmodule Astarte.VMQ.Plugin.Test2 do
       authorized_base_path = "#{realm}/#{authorized_device_id}"
 
       check all(
-              topics <- list_of(TopicGenerator.mqtt_topic(), min_length: 1),
-              topic_tokens = Enum.map(topics, &String.split(&1, "/", trim: true)),
+              topic_tokens <- topic_tokens(),
               qos <- list_of(integer(0..2), min_length: 1)
             ) do
         unauthorized_topics = Enum.zip(topic_tokens, qos)
@@ -157,8 +154,7 @@ defmodule Astarte.VMQ.Plugin.Test2 do
       authorized_base_path = "#{realm}/#{authorized_device_id}"
 
       check all(
-              topics <- list_of(TopicGenerator.mqtt_topic(), min_length: 1),
-              topic_tokens = Enum.map(topics, &String.split(&1, "/", trim: true)),
+              topic_tokens <- topic_tokens(),
               qos <- list_of(integer(0..2), min_length: 1)
             ) do
         authorized_topics = [
@@ -181,8 +177,7 @@ defmodule Astarte.VMQ.Plugin.Test2 do
 
     property "ignores topics not related to devices" do
       check all(
-              topics <- list_of(TopicGenerator.mqtt_topic(), min_length: 1),
-              topic_tokens = Enum.map(topics, &String.split(&1, "/", trim: true)),
+              topic_tokens <- topic_tokens(),
               qos <- list_of(integer(0..2), min_length: 1)
             ) do
         topics = Enum.zip(topic_tokens, qos)
@@ -205,9 +200,7 @@ defmodule Astarte.VMQ.Plugin.Test2 do
       device_id = DeviceHelper.random_device()
       device_base_path = "#{realm}/#{device_id}"
 
-      check all(topic <- TopicGenerator.mqtt_topic(prefix: "#{device_base_path}/"), min_length: 1) do
-        topic_tokens = String.split(topic, "/", trim: true)
-
+      check all(topic_tokens <- topic_tokens(prefix: "#{device_base_path}/")) do
         assert :ok =
                  Plugin.auth_on_publish(
                    :dontcare,
@@ -240,9 +233,7 @@ defmodule Astarte.VMQ.Plugin.Test2 do
       authorized_device_id = DeviceHelper.random_device()
       authorized_base_path = "#{realm}/#{authorized_device_id}"
 
-      check all(topics <- list_of(TopicGenerator.mqtt_topic(), min_length: 1)) do
-        topic_tokens = Enum.map(topics, &String.split(&1, "/", trim: true))
-
+      check all(topic_tokens <- topic_tokens()) do
         assert {:error, :unauthorized} =
                  Plugin.auth_on_publish(
                    :dontcare,
@@ -258,9 +249,7 @@ defmodule Astarte.VMQ.Plugin.Test2 do
     test "ignores non-devices" do
       not_a_device_id = DeviceFixture.not_a_device_id()
 
-      check all(topics <- list_of(TopicGenerator.mqtt_topic(), min_length: 1)) do
-        topic_tokens = Enum.map(topics, &String.split(&1, "/", trim: true))
-
+      check all(topic_tokens <- topic_tokens()) do
         assert :next =
                  Plugin.auth_on_publish(
                    :dontcare,
@@ -279,12 +268,8 @@ defmodule Astarte.VMQ.Plugin.Test2 do
     @describetag :amqp
 
     setup %{chan: chan, realm_name: realm_name} do
-      test_pid = self()
       encoded_device_id = DeviceHelper.random_device()
-      queue_name = AMQPHelper.setup_device_queue!(chan, realm_name, encoded_device_id)
-      consumer_tag = AMQPHelper.setup_consumer!(test_pid, chan, queue_name)
-
-      on_exit(fn -> Queue.unsubscribe(chan, consumer_tag) end)
+      setup_test_consumer!(chan, realm_name, encoded_device_id)
       {:ok, %{device_id: encoded_device_id}}
     end
 
@@ -366,8 +351,7 @@ defmodule Astarte.VMQ.Plugin.Test2 do
       realm_name: realm,
       device_id: device_id
     } do
-      check all(interfaces <- list_of(InterfaceGenerator.interface())) do
-        payload = generate_introspection_payload(interfaces)
+      check all(payload <- introspection_payload()) do
         device_base_path = "#{realm}/#{device_id}"
         introspection_topic = [realm, device_id]
 
@@ -442,15 +426,14 @@ defmodule Astarte.VMQ.Plugin.Test2 do
       device_id: device_id
     } do
       check all(
-              interface <- InterfaceGenerator.interface(),
-              data_topic <- TopicGenerator.data_topic(realm, device_id, interface.name),
+              interface_name <- interface_name(),
+              data_topic <- TopicGenerator.data_topic(realm, device_id, interface_name),
               # Don't care for the type right now
               payload <- PayloadGenerator.payload()
             ) do
         device_base_path = "#{realm}/#{device_id}"
-        data_base_path = "#{device_base_path}/#{interface.name}"
+        data_base_path = "#{device_base_path}/#{interface_name}"
         topic_tokens = String.split(data_topic, "/", trim: true)
-        interface_header = interface.name
         path_header = String.replace_prefix(data_topic, data_base_path, "")
 
         Plugin.on_publish(
@@ -473,7 +456,7 @@ defmodule Astarte.VMQ.Plugin.Test2 do
                  "x_astarte_msg_type" => "data",
                  "x_astarte_realm" => ^realm,
                  "x_astarte_device_id" => ^device_id,
-                 "x_astarte_interface" => ^interface_header,
+                 "x_astarte_interface" => ^interface_name,
                  "x_astarte_path" => ^path_header
                } = amqp_headers_to_map(headers)
 
@@ -517,15 +500,13 @@ defmodule Astarte.VMQ.Plugin.Test2 do
     property "do not generate introspection message on_publish", context do
       introspection_topic = [context.realm_name, context.device_id]
 
-      check all(interfaces <- list_of(InterfaceGenerator.interface())) do
-        introspection_payload = generate_introspection_payload(interfaces)
-
+      check all(payload <- introspection_payload()) do
         Plugin.on_publish(
           :dontcare,
           {:dontcare, context.not_a_device_id},
           :dontcare,
           introspection_topic,
-          introspection_payload,
+          payload,
           :dontcare
         )
 
@@ -536,12 +517,9 @@ defmodule Astarte.VMQ.Plugin.Test2 do
     @tag :on_publish
     property "do not generate control message on_publish", context do
       check all(
-              control_topic <-
-                TopicGenerator.control_topic(context.realm_name, context.device_id),
+              topic_tokens <- control_topic_tokens(context.realm_name, context.device_id),
               payload <- PayloadGenerator.payload()
             ) do
-        topic_tokens = String.split(control_topic, "/", trim: true)
-
         Plugin.on_publish(
           :dontcare,
           {:dontcare, context.not_a_device_id},
@@ -560,11 +538,8 @@ defmodule Astarte.VMQ.Plugin.Test2 do
       interface = "com.my.Interface"
 
       check all(
-              data_topic <-
-                TopicGenerator.data_topic(context.realm_name, context.device_id, interface)
+              topic_tokens <- data_topic_tokens(context.realm_name, context.device_id, interface)
             ) do
-        topic_tokens = String.split(data_topic, "/", trim: true)
-
         data_payload = "a payload"
 
         Plugin.on_publish(
@@ -587,12 +562,9 @@ defmodule Astarte.VMQ.Plugin.Test2 do
     @describetag :handle_heartbeat
 
     setup %{chan: chan, realm_name: realm_name} do
-      test_pid = self()
       encoded_device_id = DeviceHelper.random_device()
-      queue_name = AMQPHelper.setup_device_queue!(chan, realm_name, encoded_device_id)
-      consumer_tag = AMQPHelper.setup_consumer!(test_pid, chan, queue_name)
+      setup_test_consumer!(chan, realm_name, encoded_device_id)
 
-      on_exit(fn -> Queue.unsubscribe(chan, consumer_tag) end)
       {:ok, %{device_id: encoded_device_id}}
     end
 
@@ -642,12 +614,8 @@ defmodule Astarte.VMQ.Plugin.Test2 do
     @describetag :connection_serialization
 
     setup %{chan: chan, realm_name: realm_name} do
-      test_pid = self()
       encoded_device_id = DeviceHelper.random_device()
-      queue_name = AMQPHelper.setup_device_queue!(chan, realm_name, encoded_device_id)
-      consumer_tag = AMQPHelper.setup_consumer!(test_pid, chan, queue_name)
-
-      on_exit(fn -> Queue.unsubscribe(chan, consumer_tag) end)
+      setup_test_consumer!(chan, realm_name, encoded_device_id)
       {:ok, %{device_id: encoded_device_id}}
     end
 
@@ -890,6 +858,22 @@ defmodule Astarte.VMQ.Plugin.Test2 do
     end
   end
 
+  defp topic_tokens(opts \\ []) do
+    TopicGenerator.mqtt_topic(opts)
+    |> map(&String.split(&1, "/", trim: true))
+    |> list_of(min_length: 1)
+  end
+
+  defp control_topic_tokens(realm_name, device_id) do
+    TopicGenerator.control_topic(realm_name, device_id)
+    |> map(&String.split(&1, "/", trim: true))
+  end
+
+  defp data_topic_tokens(realm_name, device_id, interface) do
+    TopicGenerator.data_topic(realm_name, device_id, interface)
+    |> map(&String.split(&1, "/", trim: true))
+  end
+
   defp amqp_headers_to_map(headers) do
     Enum.reduce(headers, %{}, fn {key, _type, value}, acc ->
       Map.put(acc, key, value)
@@ -909,11 +893,25 @@ defmodule Astarte.VMQ.Plugin.Test2 do
     "#{realm_trunc}-#{device_id_trunc}-#{timestamp_hex_str}-"
   end
 
-  defp generate_introspection_payload(interfaces) do
-    interfaces
-    |> Enum.map(fn interface ->
+  defp introspection_payload() do
+    InterfaceGenerator.interface()
+    |> map(fn interface ->
       "#{interface.name}:#{interface.version_major}:#{interface.version_minor}"
     end)
+    |> list_of()
     |> Enum.join(";")
+  end
+
+  defp interface_name() do
+    InterfaceGenerator.interface()
+    |> map(fn %{name: name} -> name end)
+  end
+
+  defp setup_test_consumer!(chan, realm_name, encoded_device_id) do
+    test_pid = self()
+    queue_name = AMQPHelper.setup_device_queue!(chan, realm_name, encoded_device_id)
+    consumer_tag = AMQPHelper.setup_consumer!(test_pid, chan, queue_name)
+
+    on_exit(fn -> Queue.unsubscribe(chan, consumer_tag) end)
   end
 end
